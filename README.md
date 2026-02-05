@@ -34,7 +34,7 @@ MoveIt 2 configuration package including:
 
 ```bash
 # Clone the repository
-git clone <your-repo-url>
+git clone git@github.com:akoushik2k/SO-ARM-MoveIt-Config.git
 cd SO_ARM_Project_ws
 
 # Install dependencies
