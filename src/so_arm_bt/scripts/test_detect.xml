@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<root BTCPP_format="4">
+    <BehaviorTree ID="TestDetection">
+        <Sequence name="test_sequence">
+            <!-- Detect all objects -->
+            <DetectObjects
+                object_class=""
+                min_confidence="0.3"
+                detections="{all_detections}" />
+
+            <!-- Log success -->
+            <AlwaysSuccess name="done" />
+        </Sequence>
+    </BehaviorTree>
+</root>

@@ -1,0 +1,10 @@
+# Request: Detection parameters
+string object_class  # Empty string = detect all objects
+float32 min_confidence  # Minimum detection confidence (0.0 - 1.0)
+
+---
+
+# Response: Detected objects
+bool success
+vision_msgs/Detection3DArray detections
+string message  # Error or status message

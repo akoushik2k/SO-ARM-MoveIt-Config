@@ -1,0 +1,20 @@
+vision_processor_node:
+  ros__parameters:
+    # Camera topics (Isaac Sim)
+    camera_topic: "/isaac_rgb"
+    depth_topic: "/isaac_depth"
+    camera_info_topic: "/camera_info"
+    
+    # Frame IDs - Updated to match Isaac Sim TF
+    camera_frame: "Camera"  # Isaac Sim publishes as "Camera"
+    base_frame: "base"  # Robot base frame
+    
+    # Object detection parameters
+    detection_model: "yolov8n.onnx"  # Path to YOLO ONNX model
+    confidence_threshold: 0.4  # Lower for better detection in simulation
+    nms_threshold: 0.4
+    
+    # Grasp estimation parameters
+    grasp_method: "geometric"  # Options: "geometric", "point_cloud", "learned"
+    grasp_approach_distance: 0.10  # Pre-grasp offset in meters
+    top_down_view: true  # Camera is top-down view

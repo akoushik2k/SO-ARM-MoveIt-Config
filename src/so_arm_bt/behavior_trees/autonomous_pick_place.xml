@@ -1,0 +1,44 @@
+<root main_tree_to_execute="AutonomousPickPlace">
+    <BehaviorTree ID="AutonomousPickPlace">
+        <Sequence name="pick_place_sequence">
+            <!-- Detect target object -->
+            <RetryUntilSuccessful num_attempts="3">
+                <DetectObjects object_class="cup" min_confidence="0.6" output_key="detected_objects" />
+            </RetryUntilSuccessful>
+
+            <!-- Compute grasp pose for first detected object -->
+            <ComputeGraspPose
+                object_id="cup_0"
+                object_pose="{detected_objects[0].pose}"
+                grasp_output_key="grasp_pose"
+                pre_grasp_output_key="pre_grasp_pose" />
+
+            <!-- Open gripper -->
+            <OpenGripper name="Open Gripper" />
+
+            <!-- Move to pre-grasp position -->
+            <MoveToPose target_pose="{pre_grasp_pose}" />
+
+            <!-- Move to grasp position -->
+            <MoveToPose target_pose="{grasp_pose}" />
+
+            <!-- Close gripper to grasp object -->
+            <CloseGripper name="Close Gripper" />
+
+            <!-- Attach object to planning scene -->
+            <AttachObject object_id="cup_0" link_name="gripper_link" />
+
+            <!-- Move to place position (named target) -->
+            <MoveToPose target_pose="PlacePosition" />
+
+            <!-- Open gripper to release object -->
+            <OpenGripper name="Release Object" />
+
+            <!-- Detach object from planning scene -->
+            <DetachObject object_id="cup_0" />
+
+            <!-- Return to home position -->
+            <GoHome home_position="Home" />
+        </Sequence>
+    </BehaviorTree>
+</root>

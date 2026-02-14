@@ -1,0 +1,11 @@
+<root main_tree_to_execute="MainTree">
+    <BehaviorTree ID="MainTree">
+        <Sequence name="root_sequence">
+            <CheckPlanningScene expected_scene="default" />
+            <OpenGripper name="Open Gripper" />
+            <MoveToPose target_pose="Home" />
+            <CloseGripper name="Close Gripper" />
+            <MoveToPose target_pose="Upright" />
+        </Sequence>
+    </BehaviorTree>
+</root>
