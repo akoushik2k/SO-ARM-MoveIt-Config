@@ -1,92 +1,73 @@
-# SO-ARM 101 MoveIt Configuration
+# SO-101 Vision-Guided Autonomous Picking with NVIDIA Nemotron
 
-ROS 2 MoveIt configuration for the SO-ARM 101 robotic arm with LeRobot naming convention.
+This repository integrates an **Autonomous Picking Pipeline** for the SO-101 robotic arm, leveraging **NVIDIA Nemotron** to bridge the gap between human intent and robotic action via Behavior Trees.
 
-## Overview
+## 🚀 The Architecture: A Decoupled Pipeline
 
-This repository contains the MoveIt configuration and URDF description for the SO-ARM 101 6-DOF robotic arm, compatible with LeRobot and Isaac Sim.
+The project follows a modern "Perception-Cognition-Action" architecture, decoupling high-level planning from low-level execution for maximum flexibility and reliability.
 
-## Packages
+### Stage 1: Perception (Vision Processor)
+- **Node**: `vision_processor_node.py`
+- **Role**: Detects objects (e.g., "red cube") in a 2D camera stream and de-projects them into 3D space.
+- **Key Solve**: Implements **unit scaling (feet to meters)** ensuring simulation coordinates match the robot's physical reach (~0.45m).
+- **Industry Standard**: Uses ROS 2 `tf2` transforms with **Simulation Time Synchronization** to ensure sub-millimeter temporal alignment between the robot and its environment.
 
-### `so_arm_description`
-URDF robot description with LeRobot-compatible joint naming:
-- **Rotation** (motor1) - Base rotation
-- **Pitch** (motor2) - Shoulder pitch  
-- **Elbow** (motor3) - Elbow flexion
-- **Wrist_Pitch** (motor4) - Wrist pitch
-- **Wrist_Roll** (motor5) - Wrist roll
-- **Gripper** (motor6) - Gripper open/close
+### Stage 2: Cognition (NVIDIA Nemotron Compiler)
+- **Node**: `bt_compiler_node.py`
+- **Role**: Translates natural language intent (e.g., *"Pick up the red cube and move it to the home position"*) into a structured Behavior Tree XML.
+- **The Nemotron Edge**: Unlike static scripts, Nemotron models complex logic (Retries, Fallbacks, Gripper timing) on-the-fly, allowing the robot to reason about tasks without hardcoded state machines.
 
-### `so_arm_moveit_config`
-MoveIt 2 configuration package including:
-- Motion planning configuration
-- ROS 2 Control integration
-- RViz visualization setup
-- Joint limits and controller configuration
+### Stage 3: Action (Behavior Tree Executor)
+- **Node**: `bt_executor_node` (C++)
+- **Role**: Parses the generated XML and executes motion via **MoveIt 2**.
+- **Execution Efficiency**: Uses specialized nodes like `PrecisePick` for controlled hover-approaches, ensuring safety and precision during the final grasp.
 
-## Requirements
+---
 
-- ROS 2 Humble
-- MoveIt 2
-- Isaac Sim (optional, for simulation)
+## 🛠 Why NVIDIA Nemotron?
 
-## Installation
+### 🧠 Intent-to-Action Mapping
+In the industry, hardcoding every possible pick-and-place permutation is impossible. **Nemotron** acts as the cognitive engine, converting ambiguous human requests into deterministic logical structures (Behavior Trees). This enables "Zero-Code" tasking where an operator describes a goal, and the robot compiles its own execution plan.
 
+### 🔄 Resilience & Reactivity
+Nemotron understands the importance of failure recovery. By automatically wrapping detection steps in `<RetryUntilSuccessful>` decorators, it ensures the robot doesn't give up if an object is briefly occluded or if a planning attempt fails—a critical requirement for high-uptime industrial deployments.
+
+---
+
+## 🏭 Industry Significance
+
+This project demonstrates a production-grade approach to **Software-Defined Robotics**:
+1. **Portability**: The system uses dynamic package lookups (`get_package_share_directory`), making it deployable across different factory workstations without path re-configuration.
+2. **Safety-First Planning**: By separating the "thinking" (LLM) from the "doing" (MoveIt/C++), we ensure that even if the LLM suggests an complex task, the underlying C++ safety constraints prevent physical collisions.
+3. **Natural Human Interaction**: Redefines the role of the human operator from "Programmer" to "Instructors," significantly lowering the barrier to entry for robotic automation.
+
+---
+
+## 🚦 How to Run
+
+### 1. Environment Setup
+Avoid environment conflicts by using the system Python 3.10:
 ```bash
-# Clone the repository
-git clone git@github.com:akoushik2k/SO-ARM-MoveIt-Config.git
-cd SO_ARM_Project_ws
-
-# Install dependencies
-rosdep install --from-paths src --ignore-src -r -y
-
-# Build the workspace
-colcon build
-
-# Source the workspace
-source install/setup.bash
+export PATH=/usr/bin:/usr/sbin:/bin:/sbin && source /opt/ros/humble/setup.bash && source install/setup.bash
 ```
 
-## Usage
-
-### Launch MoveIt with RViz
-
+### 2. Execution Sequence
+**A. Start the Full Stack (Perception & Planner)**
 ```bash
-ros2 launch so_arm_moveit_config demo.launch.py
+ros2 launch so_arm_bt bt_executor.launch.py
 ```
 
-### Launch with Isaac Sim
+**B. Define the Intent**
+Open a new terminal and provide the task:
+```bash
+ros2 topic pub --once /task_intent std_msgs/msg/String "{data: 'Pick up the red cube and move it home'}"
+```
 
-1. Start Isaac Sim
-2. Load your SO-ARM robot model
-3. Run the ROS 2 bridge and controllers
+**C. Execute the Compiled Task**
+Once Terminal A confirms "Generated tree saved," run the executor:
+```bash
+ros2 launch so_arm_bt run_bt.launch.py
+```
 
-## Joint Names (LeRobot Convention)
-
-This configuration uses the LeRobot naming convention for compatibility:
-
-| Joint Name | Description | Motor |
-|------------|-------------|-------|
-| Rotation | Base rotation | motor1 |
-| Pitch | Shoulder pitch | motor2 |
-| Elbow | Elbow flexion | motor3 |
-| Wrist_Pitch | Wrist pitch | motor4 |
-| Wrist_Roll | Wrist roll | motor5 |
-| Gripper | Gripper control | motor6 |
-
-## Configuration Files
-
-- `config/moveit_controllers.yaml` - Controller configuration
-- `config/joint_limits.yaml` - Joint limits and dynamics
-- `config/so101_new_calib.ros2_control.xacro` - ROS 2 Control hardware interface
-
-## References
-
-- [LeRobot](https://github.com/huggingface/lerobot)
-- [SO-ARM 101 Reference](https://github.com/MuammerBay/SO-ARM101_MoveIt_IsaacSim)
-
-
-
-## Contributing
-
-Contributions are welcome! Please open an issue or submit a pull request.
+---
+*Created for the SO-101 Vision Integration Project.*

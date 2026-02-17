@@ -1,0 +1,10 @@
+<root main_tree_to_execute="MainTree">
+    <BehaviorTree ID="MainTree">
+        <Sequence name="root_sequence">
+            <GripperAction state="open" />
+            <MoveToPose target_pose="home" />
+            <GripperAction state="close" />
+            <MoveToPose target_pose="ready" />
+        </Sequence>
+    </BehaviorTree>
+</root>

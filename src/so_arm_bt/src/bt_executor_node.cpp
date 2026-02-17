@@ -1,87 +1,149 @@
 #include <rclcpp/rclcpp.hpp>
-#include <rclcpp_action/rclcpp_action.hpp>
-#include "behaviortree_cpp/bt_factory.h"
-#include "behaviortree_cpp/loggers/groot2_publisher.h"
+#include <filesystem>
 
-#include "so_arm_bt/move_to_pose_action.hpp"
-#include "so_arm_bt/gripper_moveit_actions.hpp"
-#include "so_arm_bt/check_planning_scene.hpp"
-#include "so_arm_bt/detect_objects_action.hpp"
-
+#include <behaviortree_cpp_v3/bt_factory.h>
+#include <behaviortree_cpp_v3/loggers/bt_cout_logger.h>
 #include <moveit/move_group_interface/move_group_interface.h>
 
-static const rclcpp::Logger LOGGER = rclcpp::get_logger("bt_executor_node");
+#include "so_arm_bt/move_to_pose.hpp"
+#include "so_arm_bt/gripper_actions.hpp"
+#include "so_arm_bt/planning_scene_nodes.hpp"
+#include "so_arm_bt/vision_nodes.hpp"
+#include "so_arm_bt/precise_pick_node.hpp"
+#include "so_arm_bt/condition_nodes.hpp"
+#include "so_arm_bt/recovery_nodes.hpp"
 
-int main(int argc, char ** argv)
+int main(int argc, char** argv)
 {
-    rclcpp::init(argc, argv);
-    auto node = rclcpp::Node::make_shared("bt_executor_node");
+  rclcpp::init(argc, argv);
+  auto node = rclcpp::Node::make_shared("bt_executor_node");
 
-    // Params
-    node->declare_parameter("bt_xml", "");
-    std::string bt_xml;
-    if (!node->get_parameter("bt_xml", bt_xml) || bt_xml.empty()) {
-        RCLCPP_ERROR(LOGGER, "Parameter 'bt_xml' is empty");
-        return 1;
-    }
+  // Allow time for things to start up
+  rclcpp::sleep_for(std::chrono::seconds(1));
 
-    // MoveIt Interface
-    auto move_group = std::make_shared<moveit::planning_interface::MoveGroupInterface>(node, "arm");
-    auto gripper_group = std::make_shared<moveit::planning_interface::MoveGroupInterface>(node, "gripper");
+  // Initialize MoveGroupInterfaces
+  // Assuming 'arm' is the arm group and 'gripper' is the gripper group
+  // Adjust these names based on your SRDF!
+  auto arm_group = std::make_shared<moveit::planning_interface::MoveGroupInterface>(node, "arm");
+  auto gripper_group = std::make_shared<moveit::planning_interface::MoveGroupInterface>(node, "gripper");
 
-    // Create executor for spinning
-    auto executor = std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
-    executor->add_node(node);
+  BT::BehaviorTreeFactory factory;
 
-    BT::BehaviorTreeFactory factory;
+  // Register Custom Nodes
+  factory.registerBuilder<so_arm_bt::MoveToPose>("MoveToPose",
+                                                 [&](const std::string& name, const BT::NodeConfiguration& config)
+                                                 {
+                                                   return std::make_unique<so_arm_bt::MoveToPose>(name, config, arm_group);
+                                                 });
 
-    // Register Nodes
-    factory.registerBuilder<so_arm_bt::MoveToPoseSync>("MoveToPose",
-        [move_group](const std::string& name, const BT::NodeConfig& config)
-        {
-            return std::make_unique<so_arm_bt::MoveToPoseSync>(name, config, move_group);
-        });
+  factory.registerBuilder<so_arm_bt::GripperAction>("GripperAction",
+                                                    [&](const std::string& name, const BT::NodeConfiguration& config)
+                                                    {
+                                                      return std::make_unique<so_arm_bt::GripperAction>(name, config, gripper_group);
+                                                    });
 
-    factory.registerBuilder<so_arm_bt::OpenGripperMoveIt>("OpenGripper",
-        [gripper_group](const std::string& name, const BT::NodeConfig& config)
-        {
-            return std::make_unique<so_arm_bt::OpenGripperMoveIt>(name, config, gripper_group);
-        });
-    
-    factory.registerBuilder<so_arm_bt::CloseGripperMoveIt>("CloseGripper",
-        [gripper_group](const std::string& name, const BT::NodeConfig& config)
-        {
-            return std::make_unique<so_arm_bt::CloseGripperMoveIt>(name, config, gripper_group);
-        });
+  factory.registerBuilder<so_arm_bt::AttachObject>("AttachObject", 
+                                [&](const std::string& name, const BT::NodeConfiguration& config)
+                                {
+                                  return std::make_unique<so_arm_bt::AttachObject>(name, config);
+                                });
 
-    factory.registerNodeType<so_arm_bt::CheckPlanningScene>("CheckPlanningScene");
-    
-    // Register vision nodes
-    factory.registerBuilder<so_arm_bt::DetectObjectsAction>("DetectObjects",
-        [node, executor](const std::string& name, const BT::NodeConfig& config)
-        {
-            return std::make_unique<so_arm_bt::DetectObjectsAction>(name, config, node, executor);
-        });
+  factory.registerBuilder<so_arm_bt::DetachObject>("DetachObject", 
+                                [&](const std::string& name, const BT::NodeConfiguration& config)
+                                {
+                                  return std::make_unique<so_arm_bt::DetachObject>(name, config);
+                                });
 
 
-    // Load Tree
-    auto tree = factory.createTreeFromFile(bt_xml);
+  factory.registerBuilder<so_arm_bt::ObjectVisible>("ObjectVisible",
+                                                    [&](const std::string& name, const BT::NodeConfiguration& config)
+                                                    {
+                                                      return std::make_unique<so_arm_bt::ObjectVisible>(name, config, node);
+                                                    });
 
-    // Spin in main loop
-    rclcpp::Rate rate(10);
-    while (rclcpp::ok())
-    {
-        BT::NodeStatus status = tree.tickOnce();
-        
-        if (status == BT::NodeStatus::SUCCESS || status == BT::NodeStatus::FAILURE) {
-            RCLCPP_INFO(LOGGER, "BT Finished with status: %s", toStr(status).c_str());
-            break; 
-        }
+  factory.registerBuilder<so_arm_bt::PrecisePick>("PrecisePick",
+                                                    [&](const std::string& name, const BT::NodeConfiguration& config)
+                                                    {
+                                                      return std::make_unique<so_arm_bt::PrecisePick>(name, config, arm_group);
+                                                    });
 
-        executor->spin_some();
-        rate.sleep();
-    }
+  factory.registerBuilder<so_arm_bt::AtPose>("AtPose",
+                                             [&](const std::string& name, const BT::NodeConfiguration& config)
+                                             {
+                                               return std::make_unique<so_arm_bt::AtPose>(name, config, arm_group);
+                                             });
 
-    rclcpp::shutdown();
-    return 0;
+  factory.registerBuilder<so_arm_bt::ClearOctomap>("ClearOctomap",
+                                                   [&](const std::string& name, const BT::NodeConfiguration& config)
+                                                   {
+                                                     return std::make_unique<so_arm_bt::ClearOctomap>(name, config, node);
+                                                   });
+
+  factory.registerBuilder<so_arm_bt::GoHome>("GoHome",
+                                             [&](const std::string& name, const BT::NodeConfiguration& config)
+                                             {
+                                               return std::make_unique<so_arm_bt::GoHome>(name, config, arm_group);
+                                             });
+
+  factory.registerSimpleAction("Wait", 
+                                [&](BT::TreeNode& node) {
+                                  int msec;
+                                  if (!node.getInput("msec", msec)) return BT::NodeStatus::FAILURE;
+                                  std::this_thread::sleep_for(std::chrono::milliseconds(msec));
+                                  return BT::NodeStatus::SUCCESS;
+                                }, { BT::InputPort<int>("msec") });
+
+
+
+  // Get tree file path from parameter
+  node->declare_parameter("tree_file", "");
+  std::string tree_file = node->get_parameter("tree_file").as_string();
+
+  if (tree_file.empty())
+  {
+    RCLCPP_ERROR(node->get_logger(), "No tree_file parameter provided");
+    return 1;
+  }
+
+  RCLCPP_INFO(node->get_logger(), "Loading tree from: %s", tree_file.c_str());
+  
+  // Check if file exists to avoid realpath crash
+  if (!std::filesystem::exists(tree_file))
+  {
+    RCLCPP_ERROR(node->get_logger(), "Tree file does not exist: %s. Please provide an absolute path or ensure it's in the current directory.", tree_file.c_str());
+    return 1;
+  }
+
+  BT::Tree tree;
+  try 
+  {
+    tree = factory.createTreeFromFile(tree_file);
+  }
+  catch (const std::exception& e)
+  {
+    RCLCPP_ERROR(node->get_logger(), "Failed to create tree from XML: %s", e.what());
+    return 1;
+  }
+
+
+  // Logger
+  BT::StdCoutLogger logger_cout(tree);
+
+  // Tick the tree
+  RCLCPP_INFO(node->get_logger(), "Starting BT execution...");
+  
+  BT::NodeStatus status = BT::NodeStatus::RUNNING;
+  
+  // Simple loop
+  rclcpp::Rate rate(10);
+  while(rclcpp::ok() && status == BT::NodeStatus::RUNNING) {
+      status = tree.tickRoot();
+      rclcpp::spin_some(node); // Important to handle ROS callbacks if we have any (MoveIt uses its own async stuff usually)
+      rate.sleep();
+  }
+
+  RCLCPP_INFO(node->get_logger(), "BT Execution finished with status: %s", toStr(status, true).c_str());
+
+  rclcpp::shutdown();
+  return 0;
 }

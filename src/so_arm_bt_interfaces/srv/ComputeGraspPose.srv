@@ -1,13 +1,4 @@
-# Request: Information about the object to grasp
 string object_id
-geometry_msgs/PoseStamped object_pose
-sensor_msgs/PointCloud2 point_cloud  # Optional: for point cloud-based grasp estimation
-
 ---
-
-# Response: Computed grasp pose and quality
-bool success
 geometry_msgs/PoseStamped grasp_pose
-geometry_msgs/PoseStamped pre_grasp_pose  # Approach pose before final grasp
-float32 quality_score  # Grasp quality metric (0.0 - 1.0)
-string message  # Error or status message
+bool success
